@@ -31,3 +31,4 @@ from nautilus_trader.model.c_enums.order_type import OrderType            # noqa
 from nautilus_trader.model.c_enums.price_type import PriceType            # noqa F401 (being used)
 from nautilus_trader.model.c_enums.security_type import SecurityType      # noqa F401 (being used)
 from nautilus_trader.model.c_enums.time_in_force import TimeInForce       # noqa F401 (being used)
+from nautilus_trader.model.c_enums.trading_session_type import TradingSessionType # noqa F401 (being used)

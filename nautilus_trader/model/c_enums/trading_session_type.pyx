@@ -13,14 +13,4 @@
 #  limitations under the License.
 # -------------------------------------------------------------------------------------------------
 
-from cpython.datetime cimport datetime
-from cpython.datetime cimport tzinfo
-
-
-cpdef bint is_datetime_utc(datetime timestamp)
-cpdef bint is_tz_aware(time_object)
-cpdef bint is_tz_naive(time_object)
-cpdef datetime utc_as_local_datetime(datetime utc_time, tzinfo local_tz)
-cpdef datetime as_utc_timestamp(datetime timestamp)
-cpdef object as_utc_index(time_object)
-cpdef str format_iso8601(datetime dt)
+from nautilus_trader.model.c_enums.trading_session_type cimport TradingSessionType

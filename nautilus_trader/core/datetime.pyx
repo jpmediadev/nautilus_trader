@@ -20,6 +20,7 @@ import pandas as pd
 import pytz
 
 from cpython.datetime cimport datetime
+from cpython.datetime cimport tzinfo
 from cpython.unicode cimport PyUnicode_Contains
 
 from nautilus_trader.core.correctness cimport Condition
@@ -87,6 +88,25 @@ cpdef bint is_tz_naive(time_object):
     """
     return not is_tz_aware(time_object)
 
+cpdef datetime utc_as_local_datetime(datetime utc_time, tzinfo local_tz):
+    """
+    Convert a UTC datetime to a local datetime, given a local timezone.
+
+    Parameters
+    ----------
+    utc_time : datetime
+        The UTC timestamp.
+    local_tz : tzinfo
+        The target timezone.
+
+    Returns
+    -------
+    datetime
+        The equivalent datetime, in the target local timezone.
+
+    """
+    Condition.true(is_datetime_utc(utc_time), f"utc_time is tz aware UTC: {utc_time}")
+    return utc_time.astimezone(local_tz)
 
 cpdef datetime as_utc_timestamp(datetime timestamp):
     """

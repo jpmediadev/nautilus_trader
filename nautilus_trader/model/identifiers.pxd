@@ -29,7 +29,7 @@ cdef class Venue(Identifier):
     pass
 
 
-cdef class Exchange(Venue):
+cdef class ExchangeId(Venue):
     pass
 
 

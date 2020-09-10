@@ -92,7 +92,7 @@ cdef class Venue(Identifier):
         super().__init__(name.upper())
 
 
-cdef class Exchange(Venue):
+cdef class ExchangeId(Venue):
     """
     Represents an exchange that financial market instruments are traded on.
     The identifier value must be unique at the fund level.
@@ -100,7 +100,7 @@ cdef class Exchange(Venue):
 
     def __init__(self, str name):
         """
-        Initialize a new instance of the Exchange class.
+        Initialize a new instance of the ExchangeId class.
 
         :param name: The exchange name identifier value.
         :raises ValueError: If the name is not a valid string.

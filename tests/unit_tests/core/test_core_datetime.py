@@ -15,6 +15,7 @@
 
 from datetime import datetime
 from datetime import timedelta
+from datetime import tzinfo
 import unittest
 
 import pandas as pd
@@ -26,6 +27,7 @@ from nautilus_trader.core.datetime import format_iso8601
 from nautilus_trader.core.datetime import is_datetime_utc
 from nautilus_trader.core.datetime import is_tz_aware
 from nautilus_trader.core.datetime import is_tz_naive
+from nautilus_trader.core.datetime import utc_as_local_datetime
 from tests.test_kit.stubs import UNIX_EPOCH
 
 
@@ -119,6 +121,36 @@ class TestFunctionsTests(unittest.TestCase):
         self.assertEqual(timestamp1.tzinfo, timestamp2.tzinfo)
         self.assertEqual(None, timestamp2.tz)
         self.assertEqual(timestamp5, timestamp6)
+
+    def test_utc_as_local_datetime_given_tz_naive_datetime(self):
+        # Arrange
+        dt: datetime = datetime(2013, 2, 1, 0, 0, 0, 0)
+        tz: tzinfo = pytz.timezone("America/New_York")
+
+        # Act
+        # Assert
+        self.assertRaises(ValueError, utc_as_local_datetime, dt, tz)
+
+    def test_utc_as_local_datetime_given_non_utc_datetime(self):
+        # Arrange
+        dt: datetime = datetime(2013, 2, 1, 0, 0, 0, 0,
+                                tzinfo=pytz.timezone("Antarctica/South_Pole"))
+        tz: tzinfo = pytz.timezone("America/New_York")
+
+        # Act
+        # Assert
+        self.assertRaises(ValueError, utc_as_local_datetime, dt, tz)
+
+    def test_utc_as_local_datetime_given_utc_datetime(self):
+        # Arrange
+        dt: datetime = pytz.utc.localize(datetime(2013, 2, 1, 0, 0, 0, 0))
+        local_tz: pytz.tzinfo.DstTzInfo = pytz.timezone("America/New_York")
+
+        # Act
+        local_dt: datetime = utc_as_local_datetime(dt, local_tz)
+
+        # Assert
+        self.assertEqual(local_tz.localize(datetime(2013, 1, 31, 19, 0, 0, 0)), local_dt)
 
     def test_as_utc_timestamp_given_tz_naive_datetime(self):
         # Arrange

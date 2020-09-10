@@ -432,7 +432,7 @@ class EMACrossFiltered(TradingStrategy):
                     self.modify_order(order, order.quantity, temp_price)
 
     def _update_session_times(self):
-        time_now = self.clock.time_now()
+        time_now: datetime = self.clock.time_now()
 
         # Set trading sessions
         self.session_next_start = self.session_filter.next_start(self.session_start_zone, time_now)
