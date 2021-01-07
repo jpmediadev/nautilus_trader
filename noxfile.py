@@ -53,7 +53,7 @@ def tests(session: Session) -> None:
 @nox.session
 def tests_with_integration(session: Session) -> None:
     """Run the test suite."""
-    _setup_poetry(session)
+    _setup_poetry(session, "-E", "ccxtpro")
     _run_pytest(
         session, "--ignore=tests/performance_tests/",
     )
@@ -73,7 +73,7 @@ def tests_without_integration(session: Session) -> None:
 @nox.session
 def integration_tests(session: Session) -> None:
     """Run the integration test suite."""
-    _setup_poetry(session)
+    _setup_poetry(session, "-E", "ccxtpro")
     _run_pytest(session, "tests/integration_tests/")
 
 
@@ -82,19 +82,6 @@ def performance_tests(session: Session) -> None:
     """Run the performance test suite."""
     _setup_poetry(session)
     _run_pytest(session, "tests/performance_tests/")
-
-
-def _run_coverage(session):
-    _run_pytest(
-        session,
-        "--ignore=tests/performance_tests/",
-        "--cov-report=term",
-        "--cov-report=xml",
-        "--cov=nautilus_trader",
-        # There is an odd Coverage/Cython bug when using pytest-xdist
-        # so we have to run tests single-threaded here.
-        parallel=False,
-    )
 
 
 @nox.session
@@ -110,6 +97,19 @@ def coverage_and_annotation(session: Session) -> None:
     _setup_poetry(session, env={"PROFILING_MODE": "true"})
     _run_coverage(session)
     session.run("poetry", "install", env={"ANNOTATION_MODE": "true"})
+
+
+def _run_coverage(session):
+    _run_pytest(
+        session,
+        "--ignore=tests/performance_tests/",
+        "--cov-report=term",
+        "--cov-report=xml",
+        "--cov=nautilus_trader",
+        # There is an odd Coverage/Cython bug when using pytest-xdist
+        # so we have to run tests single-threaded here.
+        parallel=False,
+    )
 
 
 @nox.session

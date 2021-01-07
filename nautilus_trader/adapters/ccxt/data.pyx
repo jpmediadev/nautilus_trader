@@ -13,19 +13,16 @@
 #  limitations under the License.
 # -------------------------------------------------------------------------------------------------
 
-import asyncio
 from decimal import Decimal
-import time
 
 from cpython.datetime cimport datetime
-from cryptofeed.callback import TradeCallback
-from cryptofeed.exchanges import Binance
-from cryptofeed.defines import TRADES
-import cryptofeed
-import cryptofeed.feed
-import ccxt
 
-from nautilus_trader.adapters.binance.providers import BinanceInstrumentProvider
+try:
+    import ccxtpro
+except ImportError:
+    raise ImportError("ccxtpro is not installed, installation instructions at https://ccxt.pro")
+
+from nautilus_trader.adapters.ccxt.providers import CCXTInstrumentProvider
 from nautilus_trader.common.clock cimport LiveClock
 from nautilus_trader.common.logging cimport Logger
 from nautilus_trader.core.correctness cimport Condition
@@ -55,28 +52,25 @@ from nautilus_trader.model.tick cimport TradeTick
 cdef int _SECONDS_IN_HOUR = 60 * 60
 
 
-cdef class BinanceDataClient(LiveDataClient):
+cdef class CCXTDataClient(LiveDataClient):
     """
     Provides a data client for the `Binance` exchange.
     """
 
     def __init__(
         self,
-        client_rest not None: ccxt.Exchange,
-        client_feed not None: cryptofeed.FeedHandler,
+        client not None: ccxtpro.Exchange,
         LiveDataEngine engine not None,
         LiveClock clock not None,
         Logger logger not None,
     ):
         """
-        Initialize a new instance of the `BinanceDataClient` class.
+        Initialize a new instance of the `CCXTDataClient` class.
 
         Parameters
         ----------
-        client_rest : ccxt.Exchange
-            The Binance REST client.
-        client_feed : cryptofeed.FeedHandler
-            The Binance streaming feed client.
+        client : ccxtpro.Exchange
+            The unified CCXT client.
         engine : LiveDataEngine
             The live data engine for the client.
         clock : LiveClock
@@ -90,9 +84,8 @@ cdef class BinanceDataClient(LiveDataClient):
             If client_rest.name != 'Binance'.
 
         """
-        Condition.true(client_rest.name == "Binance", "client.name == `Binance`")
         super().__init__(
-            Venue("BINANCE"),
+            Venue(client.name.upper()),
             engine,
             clock,
             logger,
@@ -104,20 +97,14 @@ cdef class BinanceDataClient(LiveDataClient):
         )
 
         self._is_connected = False
-        self._is_feed_running = False
-        self._client_rest = client_rest
-        self._client_feed = client_feed
-        self._feed_loop = asyncio.new_event_loop()
-        self._instrument_provider = BinanceInstrumentProvider(
-            client=client_rest,
+        self._client = client
+        self._instrument_provider = CCXTInstrumentProvider(
+            client=client,
             load_all=False,
         )
 
         # Subscriptions
         self._subscribed_instruments = set()
-
-        # Streams
-        self._feeds_trade_ticks = {}  # type: dict[Symbol, cryptofeed.feed.Feed]
 
         try:
             # Schedule subscribed instruments update in one hour
@@ -152,7 +139,7 @@ cdef class BinanceDataClient(LiveDataClient):
         list[Symbol]
 
         """
-        return sorted(list(self._feeds_trade_ticks.keys()))
+        return []
 
     cpdef bint is_connected(self) except *:
         """
@@ -171,10 +158,6 @@ cdef class BinanceDataClient(LiveDataClient):
         Connect the client.
         """
         self._log.info("Connecting...")
-
-        if not self._feed_loop.is_running():
-            self._loop.run_in_executor(None, self._run_feed_loop)
-
         self._is_connected = True
         self._log.info("Connected.")
 
@@ -183,35 +166,6 @@ cdef class BinanceDataClient(LiveDataClient):
         Disconnect the client.
         """
         self._log.info("Disconnecting...")
-
-        self._loop.run_in_executor(None, self._stop_feed_loop)
-
-    def _run_feed_loop(self):
-        asyncio.set_event_loop(self._feed_loop)
-        self._log.info("Running feed loop...")
-        self._feed_loop.run_forever()
-
-    def _stop_feed_loop(self):
-        if not self._feed_loop.is_running():
-            self._feed_loop.run_until_complete(self._stop_feeds())
-        else:
-            self._feed_loop.create_task(self._stop_feeds())
-            while self._is_connected:
-                time.sleep(0.1)
-
-        self._log.info("Stopping feed loop...")
-        self._feed_loop.stop()
-        self._log.debug(f"feed_loop.is_running()={self._feed_loop.is_running()}")
-
-    async def _stop_feeds(self):
-        stop_tasks = []
-        for symbol, feed in self._feeds_trade_ticks.items():
-            self._log.debug(f"Stopping <TradeTick> feed for {symbol.code}...")
-            stop_tasks.append(self._feed_loop.create_task(feed.stop()))
-
-        if stop_tasks:
-            await asyncio.gather(*stop_tasks)
-
         self._is_connected = False
         self._log.info("Disconnected.")
 
@@ -220,13 +174,12 @@ cdef class BinanceDataClient(LiveDataClient):
         Reset the client.
         """
         # TODO: Reset client
-        self._instrument_provider = BinanceInstrumentProvider(
-            client=self._client_rest,
+        self._instrument_provider = CCXTInstrumentProvider(
+            client=self._client,
             load_all=False,
         )
 
         self._subscribed_instruments = set()
-        self._feeds_trade_ticks = {}  # type: dict[Symbol, cryptofeed.feed.Feed]
 
         try:
             # Schedule subscribed instruments update in one hour
@@ -282,23 +235,6 @@ cdef class BinanceDataClient(LiveDataClient):
         """
         Condition.not_none(symbol, "symbol")
 
-        if symbol in self._feeds_trade_ticks:
-            return
-
-        feed = cryptofeed.exchanges.Binance(
-            pairs=[symbol.code.replace('/', '-')],
-            channels=[TRADES],
-            callbacks={TRADES: TradeCallback(self._on_trade_tick)},
-        )
-
-        self._feeds_trade_ticks[symbol] = feed
-        self._feed_loop.call_soon_threadsafe(self._add_feed, feed)
-
-    def _add_feed(self, feed):
-        self._client_feed.add_feed(feed)
-        self._client_feed.run_feed(self._feed_loop, feed)
-        self._log.debug(f"Added {feed}.")
-
     cpdef void subscribe_bars(self, BarType bar_type) except *:
         """
         Subscribe to `Bar` data for the given bar type.
@@ -353,16 +289,7 @@ cdef class BinanceDataClient(LiveDataClient):
         """
         Condition.not_none(symbol, "symbol")
 
-        if symbol not in self._feeds_trade_ticks:
-            return
-
-        feed = self._feeds_trade_ticks.get(symbol)
-        self._feed_loop.call_soon_threadsafe(self._remove_feed, feed)
-        del self._feeds_trade_ticks[symbol]
-
-    def _remove_feed(self, feed):
-        self._feed_loop.create_task(feed.stop())
-        self._log.debug(f"Removed {feed}.")
+        # TODO: Implement
 
     cpdef void unsubscribe_bars(self, BarType bar_type) except *:
         """
@@ -596,7 +523,7 @@ cdef class BinanceDataClient(LiveDataClient):
 
         cdef list trades
         try:
-            trades = self._client_rest.fetch_trades(
+            trades = self._client.fetch_trades(
                 symbol=symbol.code,
                 since=to_posix_ms(from_datetime) if from_datetime is not None else None,
                 limit=limit,
@@ -680,7 +607,7 @@ cdef class BinanceDataClient(LiveDataClient):
 
         cdef list data
         try:
-            data = self._client_rest.fetch_ohlcv(
+            data = self._client.fetch_ohlcv(
                 symbol=bar_type.symbol.code,
                 timeframe=timeframe,
                 since=to_posix_ms(from_datetime) if from_datetime is not None else None,
